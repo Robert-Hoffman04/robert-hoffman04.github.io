@@ -1,0 +1,520 @@
+---
+//  Intentionally left entirely independant for portability
+
+
+interface NavItem {
+    label: string;
+    href: string;
+    icon: string;
+}
+
+interface Props {
+    items: NavItem[];
+    activeIndex?: number;
+    orientation?: "horizontal" | "vertical";
+    // True -> Left or Bottom, False -> Right or Top. Depending on orientation.
+    popupSide?: boolean;
+}
+
+const {
+    items,
+    activeIndex = 0,
+    orientation = "horizontal",
+    popupSide = true,
+} = Astro.props;
+---
+
+<nav
+    class="lg-nav"
+    data-active-index={activeIndex}
+    data-orientation={orientation}
+    ,
+    data-popup-side={popupSide}
+>
+    <div class="lg-nav__clip">
+        <div class="lg-nav__blob" aria-hidden="true"></div>
+        <ul class="lg-nav__list" role="list">
+            {
+                items.map((item, i) => (
+                    <li class="lg-nav__cell">
+                        <a
+                            href={item.href}
+                            class="lg-nav__item"
+                            data-index={i}
+                            data-label={item.label}
+                            aria-label={item.label}
+                            aria-current={
+                                i === activeIndex ? "page" : undefined
+                            }
+                        >
+                            <span class="lg-nav__icon" aria-hidden="true">
+                                <Fragment set:html={item.icon} />
+                            </span>
+                        </a>
+                    </li>
+                ))
+            }
+        </ul>
+    </div>
+
+    <div class="lg-nav__tooltip" aria-hidden="true"></div>
+</nav>
+
+<style>
+    .lg-nav {
+        position: relative;
+        display: inline-flex;
+        padding: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 12px 30px -12px rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(20px) saturate(160%);
+        -webkit-backdrop-filter: blur(20px) saturate(160%);
+        overflow: visible;
+    }
+
+    /* This wrapper's rounded rect IS the "wall" the blob presses against:
+     clipping it here means the blob's ends always resolve to the same
+     pill silhouette as the container, instead of overflowing past it. */
+    .lg-nav__clip {
+        position: relative;
+        display: inline-flex;
+        border-radius: 999px;
+        overflow: hidden;
+        isolation: isolate;
+    }
+
+    .lg-nav[data-orientation="vertical"] .lg-nav__clip {
+        display: inline-flex;
+    }
+
+    .lg-nav__list {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .lg-nav[data-orientation="horizontal"] .lg-nav__list {
+        flex-direction: row;
+    }
+
+    .lg-nav[data-orientation="vertical"] .lg-nav__list {
+        flex-direction: column;
+    }
+
+    .lg-nav__cell {
+        display: flex;
+    }
+
+    .lg-nav__item {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        padding: 0;
+        border-radius: 999px;
+        font-family:
+            "Inter",
+            ui-sans-serif,
+            system-ui,
+            -apple-system,
+            sans-serif;
+        color: rgba(240, 238, 233, 0.72);
+        text-decoration: none;
+        white-space: nowrap;
+        transition: color 0.25s ease;
+    }
+
+    .lg-nav__item:hover,
+    .lg-nav__item[aria-current="page"] {
+        color: rgba(255, 255, 255, 0.98);
+    }
+
+    .lg-nav__item:focus-visible {
+        outline: 2px solid rgba(255, 255, 255, 0.6);
+        outline-offset: 2px;
+    }
+
+    .lg-nav__icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        pointer-events: none;
+    }
+
+    .lg-nav__icon :global(svg) {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+        stroke: none;
+    }
+
+    .lg-nav__tooltip {
+        position: absolute;
+        z-index: 50;
+        padding: 7px 11px;
+        border-radius: 10px;
+        background: rgba(20, 20, 22, 0.88);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow:
+            0 8px 24px rgba(0, 0, 0, 0.35),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(14px) saturate(140%);
+        -webkit-backdrop-filter: blur(14px) saturate(140%);
+        color: rgba(255, 255, 255, 0.95);
+        font-family:
+            "Inter",
+            ui-sans-serif,
+            system-ui,
+            -apple-system,
+            sans-serif;
+        font-size: 0.75rem;
+        font-weight: 500;
+        line-height: 1;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, -100%) scale(0.94);
+        transition:
+            opacity 0.18s ease,
+            transform 0.18s ease;
+    }
+
+    .lg-nav__tooltip.is-visible {
+        opacity: 1;
+    }
+
+    .lg-nav__blob {
+        position: absolute;
+        z-index: 0;
+        pointer-events: none;
+        border-radius: 999px;
+        background: linear-gradient(
+            160deg,
+            rgba(255, 255, 255, 0.4),
+            rgba(255, 255, 255, 0.08)
+        );
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        box-shadow:
+            inset 0 1px 1px rgba(255, 255, 255, 0.6),
+            inset 0 -6px 10px rgba(255, 255, 255, 0.05),
+            0 4px 16px rgba(0, 0, 0, 0.25);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        /* Resting state: a faint ghost marking the locked item. */
+        opacity: 0.4;
+        transition: opacity 0.35s ease;
+    }
+
+    .lg-nav.is-live .lg-nav__blob {
+        opacity: 1;
+    }
+
+    .lg-nav[data-orientation="horizontal"] .lg-nav__blob {
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: 0;
+    }
+
+    .lg-nav[data-orientation="vertical"] .lg-nav__blob {
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 0;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .lg-nav__blob {
+            transition: opacity 0.15s linear;
+        }
+    }
+</style>
+
+<script>
+    type Spring = { pos: number; vel: number };
+
+    function stepSpring(
+        s: Spring,
+        target: number,
+        dt: number,
+        stiffness: number,
+        damping: number,
+    ) {
+        const force = (target - s.pos) * stiffness - s.vel * damping;
+        s.vel += force * dt;
+        s.pos += s.vel * dt;
+    }
+
+    function initLiquidNav(nav: HTMLElement) {
+        const clip = nav.querySelector<HTMLElement>(".lg-nav__clip");
+        const blob = nav.querySelector<HTMLElement>(".lg-nav__blob");
+        const tooltip = nav.querySelector<HTMLElement>(".lg-nav__tooltip");
+        const items = Array.from(
+            nav.querySelectorAll<HTMLAnchorElement>(".lg-nav__item"),
+        );
+        if (!clip || !blob || !tooltip || items.length === 0) return;
+
+        const isVertical = nav.dataset.orientation === "vertical";
+        const reduceMotion = window.matchMedia(
+            "(prefers-reduced-motion: reduce)",
+        ).matches;
+
+        let rects: { start: number; size: number; center: number }[] = [];
+        let containerEnd = 0;
+        let lockedIndex = Number(nav.dataset.activeIndex ?? 0);
+        let mouseCoord: number | null = null;
+        let hovering = false;
+
+        const start = { pos: 0, vel: 0 };
+        const size = { pos: 0, vel: 0 };
+
+        function measure() {
+            const clipRect = clip.getBoundingClientRect();
+            const origin = isVertical ? clipRect.top : clipRect.left;
+            containerEnd = isVertical ? clipRect.height : clipRect.width;
+            rects = items.map((el) => {
+                const r = el.getBoundingClientRect();
+                const s = (isVertical ? r.top : r.left) - origin;
+                const sz = isVertical ? r.height : r.width;
+                return { start: s, size: sz, center: s + sz / 2 };
+            });
+        }
+
+        function nearestIndex(coord: number) {
+            let best = 0;
+            let bestDist = Infinity;
+            rects.forEach((r, i) => {
+                const d = Math.abs(r.center - coord);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = i;
+                }
+            });
+            return best;
+        }
+
+        function desiredEdges() {
+            const base = rects[lockedIndex];
+            if (!base) return { start: 0, size: 0 };
+
+            if (mouseCoord === null || !hovering) {
+                return { start: base.start, size: base.size };
+            }
+
+            const prev = rects[lockedIndex - 1];
+            const next = rects[lockedIndex + 1];
+            const highLimit = next
+                ? ((base.center + next.center) / 2 - base.center) * 0.85
+                : Infinity;
+            const lowLimit = prev
+                ? ((base.center + prev.center) / 2 - base.center) * 0.85
+                : -Infinity;
+
+            const raw = mouseCoord - base.center;
+            const pull = Math.max(Math.min(raw, highLimit), lowLimit);
+
+            const stretch = Math.abs(pull) * 0.55;
+            let lo = base.start;
+            let hi = base.start + base.size;
+
+            if (pull > 0) {
+                hi += stretch;
+            } else if (pull < 0) {
+                lo -= stretch;
+            }
+
+            lo = Math.max(lo, 0);
+            hi = Math.min(hi, containerEnd);
+
+            return { start: lo, size: hi - lo };
+        }
+
+        function frame(dt: number) {
+            const target = desiredEdges();
+            if (reduceMotion) {
+                start.pos = target.start;
+                size.pos = target.size;
+            } else {
+                stepSpring(start, target.start, dt, 210, 22);
+                stepSpring(size, target.size, dt, 210, 22);
+            }
+            if (isVertical) {
+                blob.style.transform = `translateY(${start.pos}px)`;
+                blob.style.height = `${Math.max(size.pos, 0)}px`;
+            } else {
+                blob.style.transform = `translateX(${start.pos}px)`;
+                blob.style.width = `${Math.max(size.pos, 0)}px`;
+            }
+        }
+
+        function showTooltip(index: number) {
+            const item = items[index];
+            if (!item) return;
+
+            const itemRect = item.getBoundingClientRect();
+            const navRect = nav.getBoundingClientRect();
+            const popupSide = nav.dataset.popupSide === "true";
+
+            tooltip.textContent = item.dataset.label ?? "";
+
+            if (isVertical) {
+                tooltip.style.top = `${itemRect.top - navRect.top + itemRect.height / 2}px`;
+
+                tooltip.style.transform = "translateY(-50%) scale(1)";
+
+                if (popupSide)
+                    tooltip.style.left = `${itemRect.right - navRect.left + 10}px`;
+                else
+                    tooltip.style.right = `${navRect.right - itemRect.left + 10}px`;
+            } else {
+                tooltip.style.left = `${itemRect.left - navRect.left + itemRect.width / 2}px`;
+
+                tooltip.style.transform = "translate(-50%, -100%) scale(1)";
+
+                if (popupSide)
+                    tooltip.style.top = `${itemRect.top - navRect.top - 10}px`;
+                else
+                    tooltip.style.bottom = `${navRect.bottom - itemRect.top - 10}px`;
+            }
+
+            tooltip.classList.add("is-visible");
+        }
+
+        function hideTooltip() {
+            tooltip.classList.remove("is-visible");
+        }
+
+        let last = performance.now();
+        function loop(now: number) {
+            const dt = Math.min((now - last) / 1000, 1 / 30);
+            last = now;
+            frame(dt);
+            requestAnimationFrame(loop);
+        }
+
+        function setLocked(i: number, immediate = false) {
+            lockedIndex = i;
+            if (immediate) {
+                measure();
+                const r = rects[i];
+                if (r) {
+                    start.pos = r.start;
+                    start.vel = 0;
+                    size.pos = r.size;
+                    size.vel = 0;
+                }
+            }
+        }
+
+        nav.addEventListener("mouseenter", () => {
+            hovering = true;
+            measure();
+            nav.classList.add("is-live");
+        });
+
+        nav.addEventListener("mousemove", (e) => {
+            const clipRect = clip.getBoundingClientRect();
+            mouseCoord = isVertical
+                ? e.clientY - clipRect.top
+                : e.clientX - clipRect.left;
+            const idx = nearestIndex(mouseCoord);
+            if (idx !== lockedIndex) {
+                lockedIndex = idx;
+
+                const sound = new Audio('/sounds/LiquidNav-Tick.wav');
+                sound.volume = 0.075;
+                sound.play();
+            }
+        });
+
+        nav.addEventListener("mouseleave", () => {
+            hovering = false;
+            mouseCoord = null;
+            const activeEl = nav.querySelector<HTMLElement>(
+                '[aria-current="page"]',
+            );
+            const activeIdx = activeEl
+                ? items.indexOf(activeEl as HTMLAnchorElement)
+                : lockedIndex;
+            setLocked(activeIdx);
+            nav.classList.remove("is-live");
+            hideTooltip();
+        });
+
+        // Lets external code (e.g. a page-transition controller) move the
+        // blob to a given item without needing to fake mouse/focus events.
+        // Expects: new CustomEvent("liquidnav:setactive", { detail: { index } })
+        nav.addEventListener("liquidnav:setactive", ((e: CustomEvent<{ index: number }>) => {
+            const idx = e.detail?.index;
+            if (idx === undefined || !items[idx]) return;
+            if (!hovering) {
+                measure();
+                setLocked(idx);
+            }
+        }) as EventListener);
+
+        items.forEach((el, i) => {
+            el.addEventListener("mouseenter", () => {
+                showTooltip(i);
+            });
+
+            el.addEventListener("mouseleave", () => {
+                hideTooltip();
+            });
+
+            el.addEventListener("focus", () => {
+                hovering = true;
+                measure();
+                setLocked(i);
+                nav.classList.add("is-live");
+                showTooltip(i);
+            });
+
+            el.addEventListener("blur", () => {
+                hideTooltip();
+
+                if (
+                    document.activeElement &&
+                    nav.contains(document.activeElement)
+                )
+                    return;
+                hovering = false;
+                nav.classList.remove("is-live");
+            });
+        });
+
+        window.addEventListener("resize", () => {
+            measure();
+            const r = rects[lockedIndex];
+            if (r) {
+                start.pos = r.start;
+                size.pos = r.size;
+            }
+
+            if (tooltip.classList.contains("is-visible")) {
+                showTooltip(lockedIndex);
+            }
+        });
+
+        measure();
+        setLocked(lockedIndex, true);
+        requestAnimationFrame((t) => {
+            last = t;
+            requestAnimationFrame(loop);
+        });
+    }
+
+    document.querySelectorAll<HTMLElement>(".lg-nav").forEach(initLiquidNav);
+</script>

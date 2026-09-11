@@ -1,0 +1,25 @@
+---
+import LiquidNav from '../components/LiquidNav.astro';
+
+import HomeIcon from '../icons/home.svg?raw';
+import BriefcaseIcon from '../icons/briefcase.svg?raw';
+import AtIcon from '../icons/at.svg?raw';
+
+const items = [
+  { label: 'Home', href: '#home', icon: HomeIcon },
+  { label: 'Projects', href: '#projects', icon: BriefcaseIcon },
+  { label: 'Contact', href: '#contact', icon: AtIcon },
+];
+
+interface Props {
+    activeIndex?: number;
+}
+
+const {
+    activeIndex = 0,
+} = Astro.props;
+---
+
+<header class="page__nav">
+    <LiquidNav items={items} activeIndex={activeIndex} orientation="vertical" popupSide={false} />
+</header>
