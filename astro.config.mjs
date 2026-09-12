@@ -7,5 +7,9 @@ export default defineConfig({
 
   vite: {
     plugins: [tailwindcss()],
+    //  CSS minification was causing visual bugs
+    build: {
+      cssMinify: 'esbuild',
+    },
   },
 });
