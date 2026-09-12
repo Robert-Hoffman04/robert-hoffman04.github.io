@@ -1,7 +1,4 @@
 ---
-//  Intentionally left entirely independant for portability
-
-
 interface NavItem {
     label: string;
     href: string;
@@ -12,7 +9,6 @@ interface Props {
     items: NavItem[];
     activeIndex?: number;
     orientation?: "horizontal" | "vertical";
-    // True -> Left or Bottom, False -> Right or Top. Depending on orientation.
     popupSide?: boolean;
 }
 
@@ -28,7 +24,6 @@ const {
     class="lg-nav"
     data-active-index={activeIndex}
     data-orientation={orientation}
-    ,
     data-popup-side={popupSide}
 >
     <div class="lg-nav__clip">
@@ -64,7 +59,7 @@ const {
     .lg-nav {
         position: relative;
         display: inline-flex;
-        padding: 6px;
+        padding: 12px;
         border-radius: 999px;
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -76,9 +71,6 @@ const {
         overflow: visible;
     }
 
-    /* This wrapper's rounded rect IS the "wall" the blob presses against:
-     clipping it here means the blob's ends always resolve to the same
-     pill silhouette as the container, instead of overflowing past it. */
     .lg-nav__clip {
         position: relative;
         display: inline-flex;
@@ -117,8 +109,8 @@ const {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 48px;
-        height: 48px;
+        width: 96px;
+        height: 96px;
         padding: 0;
         border-radius: 999px;
         font-family:
@@ -147,8 +139,8 @@ const {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 20px;
-        height: 20px;
+        width: 40px;
+        height: 40px;
         pointer-events: none;
     }
 
@@ -163,8 +155,8 @@ const {
     .lg-nav__tooltip {
         position: absolute;
         z-index: 50;
-        padding: 7px 11px;
-        border-radius: 10px;
+        padding: 14px 22px;
+        border-radius: 20px;
         background: rgba(20, 20, 22, 0.88);
         border: 1px solid rgba(255, 255, 255, 0.12);
         box-shadow:
@@ -179,7 +171,7 @@ const {
             system-ui,
             -apple-system,
             sans-serif;
-        font-size: 0.75rem;
+        font-size: 1.5rem;
         font-weight: 500;
         line-height: 1;
         white-space: nowrap;
@@ -212,7 +204,6 @@ const {
             0 4px 16px rgba(0, 0, 0, 0.25);
         backdrop-filter: blur(6px);
         -webkit-backdrop-filter: blur(6px);
-        /* Resting state: a faint ghost marking the locked item. */
         opacity: 0.4;
         transition: opacity 0.35s ease;
     }
@@ -279,6 +270,9 @@ const {
 
         const start = { pos: 0, vel: 0 };
         const size = { pos: 0, vel: 0 };
+
+        const tickSound = new Audio("/sounds/LiquidNav-Tick.wav");
+        tickSound.volume = 0.075;
 
         function measure() {
             const clipRect = clip.getBoundingClientRect();
@@ -375,18 +369,18 @@ const {
                 tooltip.style.transform = "translateY(-50%) scale(1)";
 
                 if (popupSide)
-                    tooltip.style.left = `${itemRect.right - navRect.left + 10}px`;
+                    tooltip.style.left = `${itemRect.right - navRect.left + 20}px`;
                 else
-                    tooltip.style.right = `${navRect.right - itemRect.left + 10}px`;
+                    tooltip.style.right = `${navRect.right - itemRect.left + 20}px`;
             } else {
                 tooltip.style.left = `${itemRect.left - navRect.left + itemRect.width / 2}px`;
 
                 tooltip.style.transform = "translate(-50%, -100%) scale(1)";
 
                 if (popupSide)
-                    tooltip.style.top = `${itemRect.top - navRect.top - 10}px`;
+                    tooltip.style.top = `${itemRect.top - navRect.top - 20}px`;
                 else
-                    tooltip.style.bottom = `${navRect.bottom - itemRect.top - 10}px`;
+                    tooltip.style.bottom = `${navRect.bottom - itemRect.top - 20}px`;
             }
 
             tooltip.classList.add("is-visible");
@@ -433,9 +427,8 @@ const {
             if (idx !== lockedIndex) {
                 lockedIndex = idx;
 
-                const sound = new Audio('/sounds/LiquidNav-Tick.wav');
-                sound.volume = 0.075;
-                sound.play();
+                tickSound.currentTime = 0;
+                tickSound.play();
             }
         });
 
@@ -453,9 +446,6 @@ const {
             hideTooltip();
         });
 
-        // Lets external code (e.g. a page-transition controller) move the
-        // blob to a given item without needing to fake mouse/focus events.
-        // Expects: new CustomEvent("liquidnav:setactive", { detail: { index } })
         nav.addEventListener("liquidnav:setactive", ((e: CustomEvent<{ index: number }>) => {
             const idx = e.detail?.index;
             if (idx === undefined || !items[idx]) return;

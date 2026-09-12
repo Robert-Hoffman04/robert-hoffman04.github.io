@@ -1,32 +1,371 @@
 ---
-import '../styles/global.css';
-
-import PageStack from '../components/PageStack.astro';
-import HomePage from '../components/sections/Home.astro';
-import ProjectsPage from '../components/sections/Projects.astro';
-import ContactPage from '../components/sections/Contact.astro';
+import Layout from '../layouts/Layout.astro';
+import Rubik from '../components/Rubik.astro';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="generator" content={Astro.generator} />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
-    <title>Robert Hoffman</title>
-  </head>
-  <body>
-	<PageStack>
-		<HomePage />
-		<ProjectsPage />
-		<ContactPage />
-	</PageStack>
-  </body>
-</html>
+<Layout title="Robert Hoffman">
+  <Rubik />
+  <section class="home page" id="home">
+
+    <div class="home__content">
+
+      <div class="home__hero">
+        <div class="home__hero-card">
+          <h1 class="home__name">
+            <span class="home__name-line">Robert</span>
+            <span class="home__name-line">Hoffman</span>
+          </h1>
+
+          <p class="home__prompt">
+            <span class="home__prompt-glyph">~/</span><span
+              class="home__prompt-text"
+              data-typed="software-engineer,web-developer,problem-solver"
+            ></span><span class="home__prompt-cursor" aria-hidden="true">_</span>
+          </p>
+
+          <p class="home__bio">
+            I'm a software engineer with a background in computational science
+            and mathematics. My experience has taken me through developing
+            and supporting web and mobile applications, troubleshooting issues,
+            working directly with users, and building solutions across the stack.
+          </p>
+        </div>
+      </div>
+
+      <div class="home__detail-block">
+        <p class="home__detail">
+          I graduated from Western Colorado University with a degree in
+          Computational Science and a minor in Mathematics. During my last semester, I worked as
+          a Junior Application Developer. Interacting directly with staff and
+          students to understand what they needed, building and troubleshooting
+          the software, and documenting it so it could keep being
+          maintained even after I moved on.
+        </p>
+
+        <p class="home__detail">
+          Most of my experience is with Python and C/C++ but I've also worked with Java, Kotlin, Rust, and
+          JavaScript, with HTML and CSS for anything front-facing. The math and
+          computational science underneath it gives me a fairly methodical
+          way of working through problems, something that carries over into all my work.
+        </p>
+
+        <p class="home__detail">
+          I'm looking to keep growing as an engineer on a team that builds
+          real things. Software engineering, application development, web
+          or mobile, wherever strong problem-solving actually matters.
+        </p>
+      </div>
+    </div>
+
+    <div class="home__scroll-hint" id="homeScrollHint" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .home__content {
+    display: flex;
+    flex-direction: column;
+    max-width: 585px;
+    margin-left: 200px;
+    align-items: center;
+  }
+
+  .home__hero {
+    width: 100%;
+    position: relative;
+    z-index: 1;
+    min-height: calc(100vh - 96px/2);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .home__hero-card {
+    padding: 3rem 3.25rem;
+    border-radius: 28px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 12px 30px -12px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+  }
+
+  .home__hero > :global(:not(.rubix-stage)) {
+    position: relative;
+    z-index: 1;
+  }
+
+  .home__detail-block {
+    width: fit-content;
+    position: relative;
+    z-index: 1;
+    margin-bottom: 4rem;
+    padding: 2.5rem 3.25rem;
+    border-radius: 28px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 12px 30px -12px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+  }
+
+  .home__name {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    font-weight: 600;
+    font-size: clamp(3rem, 8.5vw, 6.75rem);
+    line-height: 0.94;
+    letter-spacing: -0.03em;
+    color: #f5f4f7;
+  }
+
+  .home__name-line {
+    opacity: 0;
+    transform: translateY(0.4em);
+    animation: home-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .home__name-line:nth-child(2) {
+    animation-delay: 0.08s;
+  }
+
+  .home__prompt {
+    margin: 1.5rem 0 1.75rem;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: clamp(0.95rem, 1.4vw, 1.125rem);
+    color: #9b98a8;
+    opacity: 0;
+    animation: home-fade 0.5s ease-out forwards;
+    animation-delay: 0.55s;
+  }
+
+  .home__prompt-glyph {
+    color: #e8a33d;
+    margin-right: 0.5em;
+  }
+
+  .home__prompt-cursor {
+    color: #e8a33d;
+    animation: home-blink 1s step-end infinite;
+  }
+
+  .home__bio {
+    margin: 0;
+    max-width: 35rem;
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    color: #9b98a8;
+    opacity: 0;
+    animation: home-fade 0.6s ease-out forwards;
+    animation-delay: 0.85s;
+  }
+
+  .home__divider {
+    max-width: 35rem;
+    margin: 3rem 0 2.5rem;
+    border: none;
+    border-top: 1px solid rgba(245, 244, 247, 0.1);
+  }
+
+  .home__detail {
+    max-width: 35rem;
+    margin: 0 0 1.5rem;
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    color: #9b98a8;
+  }
+
+  .home__detail:last-child {
+    margin-bottom: 0;
+  }
+
+  @keyframes home-rise {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes home-fade {
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes home-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .home__name-line,
+    .home__prompt,
+    .home__bio {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+
+    .home__prompt-cursor {
+      animation: none;
+    }
+  }
+
+  .home__scroll-hint {
+    position: fixed;
+    left: 50%;
+    bottom: 28px;
+    transform: translateX(-50%);
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    color: rgba(255, 255, 255, 0.85);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  .home__scroll-hint.is-visible {
+    opacity: 1;
+  }
+
+  .home__scroll-hint.is-hidden {
+    opacity: 0;
+  }
+
+  .home__scroll-hint svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .home__scroll-hint.is-bobbing {
+    animation: home-scroll-bob 1.6s ease-in-out infinite;
+  }
+
+  @keyframes home-scroll-bob {
+    0%,
+    100% {
+      transform: translate(-50%, 0);
+    }
+    50% {
+      transform: translate(-50%, 10px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .home__scroll-hint.is-bobbing {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  function cycleRole(el: HTMLElement) {
+    const lines = (el.dataset.typed ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    if (lines.length === 0) return;
+
+    if (reduceMotion) {
+      el.textContent = lines[0];
+      return;
+    }
+
+    const typeSpeed = 38;
+    const deleteSpeed = 24;
+    const holdTime = 1600;
+    const gapTime = 400;
+
+    let lineIndex = 0;
+
+    function typeLine(text: string, onDone: () => void) {
+      let i = 0;
+      (function step() {
+        el.textContent = text.slice(0, i + 1);
+        i += 1;
+        if (i < text.length) {
+          window.setTimeout(step, typeSpeed);
+        } else {
+          window.setTimeout(onDone, holdTime);
+        }
+      })();
+    }
+
+    function deleteLine(onDone: () => void) {
+      const text = el.textContent ?? "";
+      let i = text.length;
+      (function step() {
+        el.textContent = text.slice(0, i - 1);
+        i -= 1;
+        if (i > 0) {
+          window.setTimeout(step, deleteSpeed);
+        } else {
+          window.setTimeout(onDone, gapTime);
+        }
+      })();
+    }
+
+    function runCycle() {
+      typeLine(lines[lineIndex], () => {
+        deleteLine(() => {
+          lineIndex = (lineIndex + 1) % lines.length;
+          runCycle();
+        });
+      });
+    }
+
+    window.setTimeout(runCycle, 650);
+  }
+
+  const promptEl = document.querySelector<HTMLElement>(".home__prompt-text");
+  if (promptEl) cycleRole(promptEl);
+
+  const scrollHint = document.getElementById("homeScrollHint");
+  const homeSection = document.getElementById("home");
+  if (scrollHint && homeSection) {
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const IDLE_THRESHOLD = 10000;
+    let idleTimer: number | undefined;
+
+    window.setTimeout(() => scrollHint!.classList.add("is-visible"), 1100);
+
+    function armIdleTimer() {
+      window.clearTimeout(idleTimer);
+      scrollHint!.classList.remove("is-bobbing");
+      if (reduceMotion) return;
+      idleTimer = window.setTimeout(() => {
+        scrollHint!.classList.add("is-bobbing");
+      }, IDLE_THRESHOLD);
+    }
+
+    function onScroll() {
+      armIdleTimer();
+      scrollHint!.classList.toggle("is-hidden", window.scrollY > 40);
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    (["pointerdown", "pointermove", "keydown", "wheel", "touchstart"] as const).forEach(
+      (type) => {
+        homeSection.addEventListener(type, armIdleTimer, { passive: true });
+      },
+    );
+
+    armIdleTimer();
+  }
+</script>

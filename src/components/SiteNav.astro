@@ -1,0 +1,30 @@
+---
+import LiquidNav from "./LiquidNav.astro";
+import HomeIcon from "../icons/home.svg?raw";
+import BriefcaseIcon from "../icons/briefcase.svg?raw";
+import AtIcon from "../icons/at.svg?raw";
+
+const items = [
+    { label: "Home", href: "/", icon: HomeIcon },
+    { label: "Projects", href: "/projects", icon: BriefcaseIcon },
+    { label: "Contact", href: "/contact", icon: AtIcon },
+];
+
+const activeIndex = Math.max(
+    0,
+    items.findIndex((item) => item.href === Astro.url.pathname),
+);
+---
+
+<nav
+    id="page-navigation"
+    class="fixed right-6 top-1/2 z-50 -translate-y-1/2 md:right-10"
+    aria-label="Page navigation"
+>
+    <LiquidNav
+        items={items}
+        activeIndex={activeIndex}
+        orientation="vertical"
+        popupSide={false}
+    />
+</nav>

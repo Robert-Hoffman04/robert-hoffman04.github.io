@@ -1,0 +1,692 @@
+---
+interface Props {
+  class?: string;
+}
+
+const { class: className = "" } = Astro.props;
+---
+
+<div class:list={["rubik-stage", className]} id="rubik-stage">
+  <canvas id="rubik-canvas" aria-hidden="true"></canvas>
+</div>
+
+<style>
+  .rubik-stage {
+    position: sticky;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    margin-bottom: -100vh;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .rubik-stage canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: auto;
+    touch-action: none;
+    cursor: grab;
+    opacity: 0;
+    animation: rubik-fade 0.6s ease-out forwards;
+  }
+
+  .rubik-stage canvas:active {
+    cursor: grabbing;
+  }
+
+  @keyframes rubik-fade {
+    to {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rubik-stage canvas {
+      animation: none;
+      opacity: 1;
+    }
+  }
+</style>
+
+<script>
+  import * as THREE from "three";
+  import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+  import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+  import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+  import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+  import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+
+  type Axis = "x" | "y" | "z";
+
+  interface Cubie {
+    group: THREE.Group;
+    gridPos: THREE.Vector3;
+  }
+
+  const stage = document.getElementById("rubik-stage") as HTMLDivElement | null;
+  const canvas = document.getElementById(
+    "rubik-canvas",
+  ) as HTMLCanvasElement | null;
+  if (!stage || !canvas) throw new Error("rubik: required elements not found.");
+
+  const reduceMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+
+  const CUBIE_SIZE = 0.94;
+  const STICKER_SIZE = CUBIE_SIZE * 0.8;
+  const STICKER_OFFSET = CUBIE_SIZE / 2 + 0.012;
+  const DRAG_THRESHOLD = 5;
+  const ANGLE_PER_PIXEL = Math.PI / 2 / 120;
+  const TWIST_DURATION = 180;
+  const BASE_FOV = 38;
+  const REFERENCE_CANVAS_HEIGHT = 820;
+
+  const FACE_COLORS: Record<string, number> = {
+    px: 0xff3b30,
+    nx: 0xff9500,
+    py: 0xffffff,
+    ny: 0xffd60a,
+    pz: 0x34c759,
+    nz: 0x0a84ff,
+  };
+
+  function purestHue(hex: number): number {
+    const color = new THREE.Color(hex);
+    const hsl = { h: 0, s: 0, l: 0 };
+    color.getHSL(hsl);
+    if (hsl.s < 0.05) return 0;
+    color.setHSL(hsl.h, 1, 0.5);
+    return color.getHex();
+  }
+
+  const AXIS_VEC: Record<Axis, THREE.Vector3> = {
+    x: new THREE.Vector3(1, 0, 0),
+    y: new THREE.Vector3(0, 1, 0),
+    z: new THREE.Vector3(0, 0, 1),
+  };
+
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: true,
+    alpha: true,
+    powerPreference: "high-performance",
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+
+  const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 100);
+  camera.position.set(0, 2.5, 10);
+  camera.lookAt(0, 0, 0);
+
+  const cubeGroup = new THREE.Group();
+  scene.add(cubeGroup);
+
+  const faceLightDefs: Array<{ pos: THREE.Vector3; color: number }> = [
+    { pos: new THREE.Vector3(2.3, 0, 0), color: purestHue(FACE_COLORS.px) },
+    { pos: new THREE.Vector3(-2.3, 0, 0), color: purestHue(FACE_COLORS.nx) },
+    { pos: new THREE.Vector3(0, 2.3, 0), color: purestHue(FACE_COLORS.py) },
+    { pos: new THREE.Vector3(0, -2.3, 0), color: purestHue(FACE_COLORS.ny) },
+    { pos: new THREE.Vector3(0, 0, 2.3), color: purestHue(FACE_COLORS.pz) },
+    { pos: new THREE.Vector3(0, 0, -2.3), color: purestHue(FACE_COLORS.nz) },
+  ];
+  for (const def of faceLightDefs) {
+    const light = new THREE.PointLight(def.color, 2, 30, 0);
+    light.position.copy(def.pos);
+    cubeGroup.add(light);
+  }
+
+  const BACKDROP_DISTANCE = 20;
+  const backdropAnchor = new THREE.Group();
+  backdropAnchor.position.set(0, 0, -BACKDROP_DISTANCE);
+  scene.add(camera);
+  camera.add(backdropAnchor);
+
+  const terrainMaterial = new THREE.MeshStandardMaterial({
+    color: 0x474359,
+    roughness: 0.82,
+    metalness: 0,
+  });
+
+  let terrain: THREE.Object3D | null = null;
+  const TERRAIN_NATIVE_SIZE = 6;
+
+  new OBJLoader().load("/models/terrain.obj", (obj) => {
+    obj.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.computeVertexNormals();
+        child.material = terrainMaterial;
+      }
+    });
+    obj.rotation.x = -Math.PI / 2;
+    terrain = obj;
+    backdropAnchor.add(obj);
+    fitBackdrop();
+  });
+
+  function fitBackdrop() {
+    if (!terrain) return;
+    const margin = 1.6;
+    const height =
+      2 *
+      Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) *
+      BACKDROP_DISTANCE *
+      margin;
+    const width = height * camera.aspect;
+    const extent = Math.max(width, height);
+    const scale = extent / TERRAIN_NATIVE_SIZE;
+    terrain.scale.set(scale, scale, scale);
+  }
+
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(1, 1),
+    0.055,
+    0.55,
+    0.32,
+  );
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+
+  const bodyMaterial = new THREE.MeshStandardMaterial({
+    color: 0x0b0b10,
+    roughness: 0.55,
+    metalness: 0.15,
+  });
+
+  const stickerMaterials: Record<string, THREE.MeshStandardMaterial> = {};
+  for (const [key, hex] of Object.entries(FACE_COLORS)) {
+    stickerMaterials[key] = new THREE.MeshStandardMaterial({
+      color: hex,
+      emissive: hex,
+      emissiveIntensity: 1.5,
+      roughness: 0.3,
+      metalness: 0,
+    });
+  }
+
+  const bodyGeometry = new THREE.BoxGeometry(
+    CUBIE_SIZE,
+    CUBIE_SIZE,
+    CUBIE_SIZE,
+  );
+  const stickerGeometry = new THREE.PlaneGeometry(STICKER_SIZE, STICKER_SIZE);
+
+  const cubies: Cubie[] = [];
+  const stickerMeshes: THREE.Mesh[] = [];
+
+  function addSticker(
+    cubieGroupRef: THREE.Group,
+    axis: Axis,
+    sign: 1 | -1,
+    key: string,
+  ) {
+    const mesh = new THREE.Mesh(stickerGeometry, stickerMaterials[key]);
+    const normal = AXIS_VEC[axis].clone().multiplyScalar(sign);
+    mesh.position.copy(normal.clone().multiplyScalar(STICKER_OFFSET));
+    if (axis === "x") mesh.rotation.y = ((sign === 1 ? 1 : -1) * Math.PI) / 2;
+    else if (axis === "y")
+      mesh.rotation.x = ((sign === 1 ? -1 : 1) * Math.PI) / 2;
+    else mesh.rotation.y = sign === 1 ? 0 : Math.PI;
+    mesh.userData.cubie = cubieGroupRef;
+    mesh.userData.localNormal = normal.clone().normalize();
+    cubieGroupRef.add(mesh);
+    stickerMeshes.push(mesh);
+  }
+
+  for (let x = -1; x <= 1; x++) {
+    for (let y = -1; y <= 1; y++) {
+      for (let z = -1; z <= 1; z++) {
+        if (x === 0 && y === 0 && z === 0) continue;
+
+        const group = new THREE.Group();
+        group.position.set(x, y, z);
+
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        group.add(body);
+
+        if (x === 1) addSticker(group, "x", 1, "px");
+        if (x === -1) addSticker(group, "x", -1, "nx");
+        if (y === 1) addSticker(group, "y", 1, "py");
+        if (y === -1) addSticker(group, "y", -1, "ny");
+        if (z === 1) addSticker(group, "z", 1, "pz");
+        if (z === -1) addSticker(group, "z", -1, "nz");
+
+        cubeGroup.add(group);
+        cubies.push({ group, gridPos: new THREE.Vector3(x, y, z) });
+      }
+    }
+  }
+
+  const raycaster = new THREE.Raycaster();
+  const pointerNdc = new THREE.Vector2();
+
+  type DragState =
+    | {
+        mode: "orbit";
+        startX: number;
+        startY: number;
+        startRotX: number;
+        startRotY: number;
+      }
+    | {
+        mode: "twist-pending";
+        startX: number;
+        startY: number;
+        cubie: Cubie;
+        localNormal: THREE.Vector3;
+        startPoint: THREE.Vector3;
+      }
+    | {
+        mode: "twisting";
+        startX: number;
+        startY: number;
+        cubie: Cubie;
+        axis: Axis;
+        pivot: THREE.Group;
+        layer: Cubie[];
+        tangent: THREE.Vector2;
+      };
+
+  let dragState: DragState | null = null;
+  let isAnimating = false;
+  let isUserAnimating = false;
+  let idleSpin = !reduceMotion;
+
+  function setPointerNdc(clientX: number, clientY: number) {
+    const rect = canvas!.getBoundingClientRect();
+    pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    return rect;
+  }
+
+  function worldToScreen(pos: THREE.Vector3, rect: DOMRect) {
+    const v = pos.clone().project(camera);
+    return new THREE.Vector2(
+      ((v.x + 1) / 2) * rect.width,
+      ((1 - v.y) / 2) * rect.height,
+    );
+  }
+
+  function snapQuaternionToGrid(q: THREE.Quaternion) {
+    const m = new THREE.Matrix4().makeRotationFromQuaternion(q);
+    const e = m.elements;
+    for (let i = 0; i < 16; i++) {
+      if (Math.abs(e[i]) < 1e-4) e[i] = 0;
+      else e[i] = Math.sign(e[i]);
+    }
+    q.setFromRotationMatrix(m);
+  }
+
+  function finalizeTwist(
+    pivot: THREE.Group,
+    layer: Cubie[],
+    axis: Axis,
+    steps: number,
+  ) {
+    const angle = steps * (Math.PI / 2);
+    for (const cubie of layer) {
+      cubeGroup.attach(cubie.group);
+      cubie.group.position.set(
+        Math.round(cubie.group.position.x),
+        Math.round(cubie.group.position.y),
+        Math.round(cubie.group.position.z),
+      );
+      snapQuaternionToGrid(cubie.group.quaternion);
+
+      cubie.gridPos.applyAxisAngle(AXIS_VEC[axis], angle);
+      cubie.gridPos.set(
+        Math.round(cubie.gridPos.x),
+        Math.round(cubie.gridPos.y),
+        Math.round(cubie.gridPos.z),
+      );
+    }
+    cubeGroup.remove(pivot);
+  }
+
+  function animateSnap(
+    pivot: THREE.Group,
+    layer: Cubie[],
+    axis: Axis,
+    fromAngle: number,
+    toAngle: number,
+  ) {
+    isUserAnimating = true;
+    if (reduceMotion) {
+      pivot.rotation[axis] = toAngle;
+      finalizeTwist(pivot, layer, axis, Math.round(toAngle / (Math.PI / 2)));
+      isUserAnimating = false;
+      return;
+    }
+    const start = performance.now();
+    function step(now: number) {
+      const t = Math.min(1, (now - start) / TWIST_DURATION);
+      const eased = 1 - Math.pow(1 - t, 3);
+      pivot.rotation[axis] = fromAngle + (toAngle - fromAngle) * eased;
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        finalizeTwist(pivot, layer, axis, Math.round(toAngle / (Math.PI / 2)));
+        isUserAnimating = false;
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  function onPointerDown(event: PointerEvent) {
+    if (isUserAnimating) return;
+    canvas!.setPointerCapture(event.pointerId);
+    const rect = setPointerNdc(event.clientX, event.clientY);
+
+    raycaster.setFromCamera(pointerNdc, camera);
+    const hits = isAnimating
+      ? []
+      : raycaster.intersectObjects(stickerMeshes, false);
+
+    if (hits.length > 0 && !isAnimating) {
+      const hit = hits[0];
+      const cubieGroupRef = hit.object.userData.cubie as THREE.Group;
+      const cubie = cubies.find((c) => c.group === cubieGroupRef)!;
+      dragState = {
+        mode: "twist-pending",
+        startX: event.clientX,
+        startY: event.clientY,
+        cubie,
+        localNormal: hit.object.userData.localNormal as THREE.Vector3,
+        startPoint: hit.point.clone(),
+      };
+    } else {
+      dragState = {
+        mode: "orbit",
+        startX: event.clientX,
+        startY: event.clientY,
+        startRotX: cubeGroup.rotation.x,
+        startRotY: cubeGroup.rotation.y,
+      };
+    }
+    idleSpin = false;
+    void rect;
+  }
+
+  function onPointerMove(event: PointerEvent) {
+    if (!dragState) return;
+    const dx = event.clientX - dragState.startX;
+    const dy = event.clientY - dragState.startY;
+
+    if (dragState.mode === "orbit") {
+      cubeGroup.rotation.y = dragState.startRotY + dx * 0.006;
+      cubeGroup.rotation.x = Math.max(
+        -1.1,
+        Math.min(1.1, dragState.startRotX + dy * 0.006),
+      );
+      return;
+    }
+
+    if (dragState.mode === "twist-pending") {
+      if (isAnimating) {
+        dragState = null;
+        return;
+      }
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+
+      cubeGroup.updateMatrixWorld(true);
+      const cubeLocalNormal = dragState.localNormal
+        .clone()
+        .applyQuaternion(dragState.cubie.group.quaternion);
+
+      const ax = Math.abs(cubeLocalNormal.x);
+      const ay = Math.abs(cubeLocalNormal.y);
+      const az = Math.abs(cubeLocalNormal.z);
+      const normalAxis: Axis = ax > ay && ax > az ? "x" : ay > az ? "y" : "z";
+      const candidates: Axis[] = (["x", "y", "z"] as Axis[]).filter(
+        (a) => a !== normalAxis,
+      );
+
+      const rect = canvas!.getBoundingClientRect();
+      const origin = dragState.cubie.group.getWorldPosition(
+        new THREE.Vector3(),
+      );
+      const dragVec = new THREE.Vector2(dx, dy).normalize();
+
+      let bestAxis: Axis = candidates[0];
+      let bestTangent = new THREE.Vector2();
+      let bestScore = -Infinity;
+      for (const axis of candidates) {
+        const axisWorldDir = AXIS_VEC[axis]
+          .clone()
+          .transformDirection(cubeGroup.matrixWorld);
+        const p1 = worldToScreen(origin, rect);
+        const p2 = worldToScreen(
+          origin.clone().add(axisWorldDir.multiplyScalar(0.15)),
+          rect,
+        );
+        const tangent = p2.sub(p1).normalize();
+        const score = Math.abs(tangent.dot(dragVec));
+        if (score > bestScore) {
+          bestScore = score;
+          bestAxis = axis;
+          bestTangent = tangent;
+        }
+      }
+
+      const layerCoord = Math.round((dragState.cubie.gridPos as any)[bestAxis]);
+      const layer = cubies.filter(
+        (c) => Math.round((c.gridPos as any)[bestAxis]) === layerCoord,
+      );
+
+      const pivot = new THREE.Group();
+      cubeGroup.add(pivot);
+      for (const c of layer) pivot.attach(c.group);
+
+      dragState = {
+        mode: "twisting",
+        startX: dragState.startX,
+        startY: dragState.startY,
+        cubie: dragState.cubie,
+        axis: bestAxis,
+        pivot,
+        layer,
+        tangent: bestTangent,
+      };
+      return;
+    }
+
+    if (dragState.mode === "twisting") {
+      const projection = dx * dragState.tangent.x + dy * dragState.tangent.y;
+      dragState.pivot.rotation[dragState.axis] = projection * ANGLE_PER_PIXEL;
+    }
+  }
+
+  function onPointerUp() {
+    if (dragState?.mode === "twisting") {
+      const current = dragState.pivot.rotation[dragState.axis];
+      const target = Math.round(current / (Math.PI / 2)) * (Math.PI / 2);
+      animateSnap(
+        dragState.pivot,
+        dragState.layer,
+        dragState.axis,
+        current,
+        target,
+      );
+    }
+    dragState = null;
+    idleSpin = !reduceMotion;
+  }
+
+  canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", onPointerUp);
+  canvas.addEventListener("pointerleave", (e) => {
+    if (dragState?.mode === "orbit") onPointerUp();
+  });
+
+  interface Move {
+    axis: Axis;
+    layer: -1 | 0 | 1;
+    steps: 1 | -1 | 2;
+  }
+
+  const AXES: Axis[] = ["x", "y", "z"];
+  const LAYERS: Array<-1 | 0 | 1> = [-1, 0, 1];
+  const STEP_OPTIONS: Array<1 | -1 | 2> = [1, -1, 2];
+
+  function randomMove(): Move {
+    return {
+      axis: AXES[Math.floor(Math.random() * AXES.length)],
+      layer: LAYERS[Math.floor(Math.random() * LAYERS.length)],
+      steps: STEP_OPTIONS[Math.floor(Math.random() * STEP_OPTIONS.length)],
+    };
+  }
+
+  function invertMove(move: Move): Move {
+    return {
+      axis: move.axis,
+      layer: move.layer,
+      steps: move.steps === 2 ? 2 : (-move.steps as 1 | -1),
+    };
+  }
+
+  function twistLayer(move: Move, duration: number, onDone?: () => void) {
+    const layerCubies = cubies.filter(
+      (c) => Math.round((c.gridPos as any)[move.axis]) === move.layer,
+    );
+    const pivot = new THREE.Group();
+    cubeGroup.add(pivot);
+    for (const c of layerCubies) pivot.attach(c.group);
+
+    const targetAngle = move.steps * (Math.PI / 2);
+    isAnimating = true;
+
+    if (duration <= 0) {
+      pivot.rotation[move.axis] = targetAngle;
+      finalizeTwist(pivot, layerCubies, move.axis, move.steps);
+      isAnimating = false;
+      onDone?.();
+      return;
+    }
+
+    const scaledDuration = duration * Math.abs(move.steps);
+    const start = performance.now();
+    function step(now: number) {
+      const t = Math.min(1, (now - start) / scaledDuration);
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      pivot.rotation[move.axis] = targetAngle * eased;
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        finalizeTwist(pivot, layerCubies, move.axis, move.steps);
+        isAnimating = false;
+        onDone?.();
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  const SCRAMBLE_LENGTH = 20;
+  const scrambleMoves: Move[] = [];
+  for (let i = 0; i < SCRAMBLE_LENGTH; i++) {
+    let move = randomMove();
+    const prev = scrambleMoves[scrambleMoves.length - 1];
+    while (prev && prev.axis === move.axis && prev.layer === move.layer) {
+      move = randomMove();
+    }
+    scrambleMoves.push(move);
+  }
+
+  for (const move of scrambleMoves) twistLayer(move, 0);
+
+  const solveMoves: Move[] = scrambleMoves.slice().reverse().map(invertMove);
+  const SOLVE_MOVE_DURATION = reduceMotion ? 0 : 1000;
+  const SOLVE_MOVE_GAP = 400;
+
+  function playSolveQueue(index: number) {
+    if (index >= solveMoves.length) {
+      idleSpin = !reduceMotion;
+      return;
+    }
+    twistLayer(solveMoves[index], SOLVE_MOVE_DURATION, () => {
+      window.setTimeout(() => playSolveQueue(index + 1), SOLVE_MOVE_GAP);
+    });
+  }
+
+  idleSpin = true;
+  window.setTimeout(() => playSolveQueue(0), reduceMotion ? 0 : 1000);
+
+  function updateViewCenter(
+    width: number,
+    height: number,
+    canvasRect: DOMRect,
+  ) {
+    const hero = document.querySelector<HTMLElement>(".home__hero");
+    const nav = document.getElementById("page-navigation");
+
+    let targetX = width / 2;
+    if (hero && nav) {
+      const heroRect = hero.getBoundingClientRect();
+      const navRect = nav.getBoundingClientRect();
+      const midpointX = (heroRect.right + navRect.left) / 2;
+      const candidateX = midpointX - canvasRect.left;
+      if (Number.isFinite(candidateX)) targetX = candidateX;
+    }
+
+    const targetY = window.innerHeight / 2;
+
+    const offsetX = width / 2 - targetX;
+    const offsetY = Number.isFinite(targetY) ? height / 2 - targetY : 0;
+    camera.setViewOffset(width, height, offsetX, offsetY, width, height);
+  }
+
+  function resize() {
+    const width = Math.max(1, window.innerWidth);
+    const height = Math.max(1, window.innerHeight);
+
+    camera.fov = THREE.MathUtils.clamp(
+      BASE_FOV * (height / REFERENCE_CANVAS_HEIGHT),
+      20,
+      75,
+    );
+
+    camera.aspect = width / height;
+
+    camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+
+    fitBackdrop();
+    updateViewCenter(width, height, canvas!.getBoundingClientRect());
+
+    renderer.setSize(width, height, false);
+    composer.setSize(width, height);
+    bloomPass.setSize(width, height);
+  }
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(canvas);
+  window.addEventListener("resize", resize);
+  resize();
+
+  let running = true;
+  document.addEventListener("visibilitychange", () => {
+    running = document.visibilityState === "visible";
+    if (running) requestAnimationFrame(tick);
+  });
+
+  function tick() {
+    if (!running) return;
+    if (idleSpin && !isUserAnimating) {
+      cubeGroup.rotation.y += 0.0018;
+    }
+    composer.render();
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+</script>
