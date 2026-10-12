@@ -1,0 +1,231 @@
+---
+import type { ItemKeyframe } from "../lib/scrollTimeline";
+
+interface Props {
+  /** Image URL (e.g. a file under public/). */
+  src: string;
+  /**
+   * Height on screen, in vh. Width follows the image's aspect ratio, and a
+   * wide image is shrunk to fit the clear area beside the page content.
+   */
+  height?: number;
+  /**
+   * Scroll keyframes: opacity, x/y offset (vw/vh), scale, and `light` for
+   * the image's light, if it has one.
+   */
+  keyframes?: ItemKeyframe[];
+  /**
+   * CSS selector of a page element to pin the image to. It then stays level
+   * with that element and scrolls with the page, like the terrain does.
+   * Without it the image stays fixed in the viewport.
+   */
+  anchor?: string;
+  /** Fades the image out as its anchor leaves the centre of the viewport. */
+  anchorFade?: boolean;
+  /** Most the panel leans towards the cursor, in degrees. 0 disables it. */
+  tilt?: number;
+  /**
+   * How close the cursor must be for the image to follow it, in image sizes
+   * (1 = only while over the image).
+   */
+  tiltRange?: number;
+  /** Size of the idle circular tilt, as a fraction of `tilt`. */
+  idleTilt?: number;
+  /** Colour of a light the image casts on the terrain. Omit for no light. */
+  light?: string;
+  lightIntensity?: number;
+}
+
+const {
+  src,
+  height = 50,
+  keyframes = [],
+  anchor,
+  anchorFade = false,
+  tilt = 12,
+  tiltRange = 1,
+  idleTilt = 0.3,
+  light,
+  lightIntensity = 2,
+} = Astro.props;
+---
+
+<div
+  class="scene-image"
+  data-src={src}
+  data-height={height}
+  data-keyframes={JSON.stringify(keyframes)}
+  data-anchor={anchor}
+  data-anchor-fade={anchorFade ? "" : undefined}
+  data-tilt={tilt}
+  data-tilt-range={tiltRange}
+  data-idle-tilt={idleTilt}
+  data-light={light}
+  data-light-intensity={lightIntensity}
+  hidden
+>
+</div>
+
+<script>
+  import * as THREE from "three";
+  import { getStage } from "../lib/sceneStage";
+  import type { ItemKeyframe } from "../lib/scrollTimeline";
+
+  // Most of the clear area beside the page content an image may span.
+  const MAX_WIDTH_FRACTION = 0.8;
+
+  // Seconds the idle tilt takes to go once around.
+  const IDLE_PERIOD = 6;
+  // Seconds to ease between the idle tilt and following the cursor when the
+  // cursor arrives or leaves. Following itself is not eased.
+  const FOCUS_DURATION = 0.35;
+
+  const pointer = { x: 0, y: 0, seen: false };
+  document.addEventListener("pointerleave", () => (pointer.seen = false));
+  window.addEventListener(
+    "pointermove",
+    (event) => {
+      pointer.x = event.clientX;
+      pointer.y = event.clientY;
+      pointer.seen = true;
+    },
+    { passive: true },
+  );
+
+  // An image is one item in the page's shared scene: a flat panel at the
+  // centre of the view that leans towards the cursor while hovered and
+  // otherwise tilts in a slow circle, optionally with a light that falls on
+  // the terrain.
+  function initImage(root: HTMLElement) {
+    const stage = getStage();
+    if (!stage) throw new Error("scene image: no backdrop on this page.");
+
+    const heightVh = Number(root.dataset.height);
+    const keyframes: ItemKeyframe[] = JSON.parse(root.dataset.keyframes ?? "[]");
+
+    const group = new THREE.Group();
+    const material = new THREE.MeshBasicMaterial({
+      transparent: true,
+      toneMapped: false,
+    });
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
+    panel.visible = false;
+    // The pivot faces the camera; the panel tilts within it.
+    const pivot = new THREE.Group();
+    pivot.quaternion.copy(stage.camera.quaternion);
+    pivot.add(panel);
+    group.add(pivot);
+
+    let aspect = 1;
+    // On-screen height in px, after fitting a wide image to the clear area.
+    let heightPx = 0;
+    let opacity = 1;
+    let loaded = false;
+
+    function fit() {
+      heightPx = Math.min(
+        (heightVh / 100) * window.innerHeight,
+        (stage!.freeWidth() * MAX_WIDTH_FRACTION) / aspect,
+      );
+      const size = heightPx * stage!.unitsPerPixel();
+      panel.scale.set(size * aspect, size, 1);
+    }
+
+    new THREE.TextureLoader().load(root.dataset.src!, (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      material.map = texture;
+      material.needsUpdate = true;
+      aspect = texture.image.width / texture.image.height;
+      loaded = true;
+      panel.visible = opacity > 0.001;
+      fit();
+      stage.invalidate();
+    });
+
+    let glow: THREE.PointLight | null = null;
+    const glowIntensity = Number(root.dataset.lightIntensity);
+    if (root.dataset.light) {
+      glow = new THREE.PointLight(root.dataset.light, glowIntensity, 30, 0);
+      group.add(glow);
+      stage.setDefaultLight(0);
+    }
+
+    stage.onResize(fit);
+
+    const maxTilt = THREE.MathUtils.degToRad(Number(root.dataset.tilt));
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const center = new THREE.Vector3();
+
+    const tiltRange = Math.max(Number(root.dataset.tiltRange), 1);
+    const idleTilt = maxTilt * Number(root.dataset.idleTilt);
+    const idlePhase = Math.random() * Math.PI * 2;
+    let focus = 0;
+    let lastFrame = performance.now();
+
+    if (maxTilt > 0 && !reduceMotion) {
+      stage.onFrame(() => {
+        const now = performance.now();
+        const elapsed = Math.min((now - lastFrame) / 1000, 0.1);
+        lastFrame = now;
+        if (!panel.visible) return;
+        group.getWorldPosition(center).project(stage.camera);
+        // Well off screen: nothing to animate.
+        if (Math.abs(center.y) > 2) return;
+
+        const angle = (now / 1000 / IDLE_PERIOD) * Math.PI * 2 + idlePhase;
+        let tiltX = Math.sin(angle) * idleTilt;
+        let tiltY = Math.cos(angle) * idleTilt;
+
+        let focused = false;
+        let cursorX = 0;
+        let cursorY = 0;
+        if (pointer.seen) {
+          // Cursor offset from the image centre, in half image sizes
+          // (±1 = on the image's edge).
+          const rect = stage.canvas.getBoundingClientRect();
+          const halfHeight = (heightPx * group.scale.y) / 2;
+          const centerX = rect.left + ((center.x + 1) / 2) * rect.width;
+          const centerY = rect.top + ((1 - center.y) / 2) * rect.height;
+          const dx = (pointer.x - centerX) / (halfHeight * aspect);
+          const dy = (pointer.y - centerY) / halfHeight;
+
+          focused = Math.max(Math.abs(dx), Math.abs(dy)) <= tiltRange;
+          cursorX = THREE.MathUtils.clamp(dy, -1, 1) * maxTilt;
+          cursorY = THREE.MathUtils.clamp(dx, -1, 1) * maxTilt;
+        }
+
+        // Only the hand-off is eased; once focused the tilt tracks directly.
+        const step = elapsed / FOCUS_DURATION;
+        focus = THREE.MathUtils.clamp(focus + (focused ? step : -step), 0, 1);
+        const blend = THREE.MathUtils.smoothstep(focus, 0, 1);
+        tiltX += (cursorX - tiltX) * blend;
+        tiltY += (cursorY - tiltY) * blend;
+
+        panel.rotation.x = tiltX;
+        panel.rotation.y = tiltY;
+        stage.invalidate();
+      });
+    }
+
+    stage.addItem({
+      object: group,
+      keyframes,
+      anchor: root.dataset.anchor
+        ? document.querySelector<HTMLElement>(root.dataset.anchor)
+        : null,
+      anchorFade: root.dataset.anchorFade !== undefined,
+      setOpacity(value) {
+        opacity = value;
+        material.opacity = value;
+        panel.visible = loaded && value > 0.001;
+      },
+      setLight(value) {
+        if (glow) glow.intensity = glowIntensity * value;
+      },
+    });
+  }
+
+  document.querySelectorAll<HTMLElement>(".scene-image").forEach(initImage);
+</script>

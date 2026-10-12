@@ -1,11 +1,67 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import ProjectCard from '../components/ProjectCard.astro';
+
 ---
 
 <Layout title="Projects | Robert Hoffman">
   <section class="projects page">
-    <div class="projects__hero">
-      <p class="text-white text-sm mb-2">Projects</p>
+    <div class="projects__content">
+      <ProjectCard project={{
+        title: "AI Pattern Recognition",
+        repo: "https://github.com/jacobmbloom/cs-capstone-pattern-recognition",
+        image: "/images/Capstone_Project_Image.png",
+        description: `Working with a real-world client, created a web application for dectecting
+        vehicles in static images, and analyzing the patterns from them. Users can upload images,
+        save the analyzed results for future reference, and view the specific patterns detected
+        all from a single web interface.`
+      }} />
+      <ProjectCard project={{
+        title: "MoView",
+        repo: "https://github.com/Robert-Hoffman04/MoView",
+        image: "/images/MoView_Project_Image.png",
+        description: `Created a full streaming platform for my own home. Custom backend through
+        a combination of Apache HTTP Server and custom python scripts for dynamic content delivery.
+        Both web and mobile clients were developed to interact with the backend, ensuring seamless
+        streaming of media content across different devices. Oldest project of mine with code
+        dating back almost 10 years.`
+      }} />
+      <ProjectCard project={{
+        title: "DiiS",
+        repo: "https://github.com/Robert-Hoffman04/DiiS/tree/arm9-jit-infra",
+        image: "/images/DiiS_Project_Image.svg",
+        description: `Revived DeSmuME Wii, a Nintendo DS emulator for the Wii that had sat
+        untouched since 2013. Ported the C/C++ codebase to the modern devkitPPC toolchain
+        (GCC 4.6 to GCC 16), then reworked major parts of the program structure and logic.
+        Full CPU JIT implementation for both architectures present in the DS. As well as 
+        an improved rendering pipeline for the specialized harware in the Wii.These additions
+        more than quadrupled the performance of the emulator and made it into actual usable
+        software rather than a tech demo.`
+      }} />
+      <ProjectCard project={{
+        title: "Tree Data Entry",
+        image: "/images/Tree_Project_Image.png",
+        description: `Created an Android application to help track data for tree growth
+        for experiments between the university and the forestry service. Built in Android
+        Studio with a majority Kotlin codebase. Personally developed the main front end,
+        including dynamic PDF parsing and rendering specific to the needs of the project.
+        As a privatly developed project, no public repository exists.`
+      }} />
     </div>
   </section>
 </Layout>
+
+<style>
+  /* Each project fills a screen, so the page itself adds no vertical padding. */
+  .projects {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .projects__content {
+    display: flex;
+    flex-direction: column;
+    padding: 0 2rem;
+    width: 50rem;
+  }
+</style>

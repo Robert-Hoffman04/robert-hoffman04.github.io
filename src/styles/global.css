@@ -5,15 +5,23 @@
     height: 100%;
 }
 
+body {
+    background-color: #000;
+    color: #f8fafc;
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    margin: 0;
+    height: 100%;
+}
+
 .page {
     min-height: 100vh;
-    background: radial-gradient(
-        1200px 600px at 50% -10%,
-        rgba(120, 130, 200, 0.18),
-        transparent
-        ),
-        #0e0d12;
     align-items: center;
     padding: 48px 140px 48px 48px;
     font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* Keeps page content above the scene canvas when it takes pointer input. */
+.page > * {
+    position: relative;
+    z-index: 1;
 }

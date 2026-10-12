@@ -10,6 +10,7 @@ interface Props {
     activeIndex?: number;
     orientation?: "horizontal" | "vertical";
     popupSide?: boolean;
+    responsive?: boolean;
 }
 
 const {
@@ -17,6 +18,7 @@ const {
     activeIndex = 0,
     orientation = "horizontal",
     popupSide = true,
+    responsive = false,
 } = Astro.props;
 ---
 
@@ -25,6 +27,7 @@ const {
     data-active-index={activeIndex}
     data-orientation={orientation}
     data-popup-side={popupSide}
+    data-responsive={responsive}
 >
     <div class="lg-nav__clip">
         <div class="lg-nav__blob" aria-hidden="true"></div>
@@ -69,6 +72,7 @@ const {
         backdrop-filter: blur(20px) saturate(160%);
         -webkit-backdrop-filter: blur(20px) saturate(160%);
         overflow: visible;
+        touch-action: none;
     }
 
     .lg-nav__clip {
@@ -231,6 +235,19 @@ const {
             transition: opacity 0.15s linear;
         }
     }
+
+    @media (max-width: 767px) {
+        .lg-nav[data-responsive="true"] .lg-nav__list {
+            flex-direction: row;
+        }
+
+        .lg-nav[data-responsive="true"] .lg-nav__blob {
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 0;
+        }
+    }
 </style>
 
 <script>
@@ -257,7 +274,12 @@ const {
         );
         if (!clip || !blob || !tooltip || items.length === 0) return;
 
-        const isVertical = nav.dataset.orientation === "vertical";
+        const baseVertical = nav.dataset.orientation === "vertical";
+        const isResponsive = nav.dataset.responsive === "true";
+        const mobileQuery = window.matchMedia("(max-width: 767px)");
+        let isVertical = isResponsive
+            ? baseVertical && !mobileQuery.matches
+            : baseVertical;
         const reduceMotion = window.matchMedia(
             "(prefers-reduced-motion: reduce)",
         ).matches;
@@ -418,23 +440,26 @@ const {
             nav.classList.add("is-live");
         });
 
-        nav.addEventListener("mousemove", (e) => {
-            const clipRect = clip.getBoundingClientRect();
-            mouseCoord = isVertical
-                ? e.clientY - clipRect.top
-                : e.clientX - clipRect.left;
-            const idx = nearestIndex(mouseCoord);
+        function coordFromClient(clientX: number, clientY: number) {
+            const clipRect = clip!.getBoundingClientRect();
+            return isVertical
+                ? clientY - clipRect.top
+                : clientX - clipRect.left;
+        }
+
+        function pointerMoveTo(coord: number) {
+            mouseCoord = coord;
+            const idx = nearestIndex(coord);
             if (idx !== lockedIndex) {
                 lockedIndex = idx;
 
                 tickSound.currentTime = 0;
                 tickSound.play();
+                showTooltip(idx);
             }
-        });
+        }
 
-        nav.addEventListener("mouseleave", () => {
-            hovering = false;
-            mouseCoord = null;
+        function resetToActive() {
             const activeEl = nav.querySelector<HTMLElement>(
                 '[aria-current="page"]',
             );
@@ -442,9 +467,73 @@ const {
                 ? items.indexOf(activeEl as HTMLAnchorElement)
                 : lockedIndex;
             setLocked(activeIdx);
+        }
+
+        nav.addEventListener("mousemove", (e) => {
+            pointerMoveTo(coordFromClient(e.clientX, e.clientY));
+        });
+
+        nav.addEventListener("mouseleave", () => {
+            hovering = false;
+            mouseCoord = null;
+            resetToActive();
             nav.classList.remove("is-live");
             hideTooltip();
         });
+
+        let touchActive = false;
+        let touchStartIndex = -1;
+
+        nav.addEventListener(
+            "touchstart",
+            (e) => {
+                const t = e.touches[0];
+                if (!t) return;
+                touchActive = true;
+                hovering = true;
+                measure();
+                nav.classList.add("is-live");
+                const coord = coordFromClient(t.clientX, t.clientY);
+                touchStartIndex = nearestIndex(coord);
+                setLocked(touchStartIndex);
+                showTooltip(touchStartIndex);
+                pointerMoveTo(coord);
+            },
+            { passive: true },
+        );
+
+        nav.addEventListener(
+            "touchmove",
+            (e) => {
+                if (!touchActive) return;
+                const t = e.touches[0];
+                if (!t) return;
+                e.preventDefault();
+                pointerMoveTo(coordFromClient(t.clientX, t.clientY));
+            },
+            { passive: false },
+        );
+
+        function endTouch(e: TouchEvent, navigate: boolean) {
+            if (!touchActive) return;
+            touchActive = false;
+            const finalIndex = lockedIndex;
+            hovering = false;
+            mouseCoord = null;
+            nav.classList.remove("is-live");
+            hideTooltip();
+
+            if (navigate && finalIndex !== touchStartIndex) {
+                e.preventDefault();
+                const target = items[finalIndex];
+                if (target) window.location.href = target.href;
+            } else {
+                resetToActive();
+            }
+        }
+
+        nav.addEventListener("touchend", (e) => endTouch(e, true));
+        nav.addEventListener("touchcancel", (e) => endTouch(e, false));
 
         nav.addEventListener("liquidnav:setactive", ((e: CustomEvent<{ index: number }>) => {
             const idx = e.detail?.index;
@@ -485,18 +574,30 @@ const {
             });
         });
 
-        window.addEventListener("resize", () => {
+        function resync() {
             measure();
             const r = rects[lockedIndex];
             if (r) {
                 start.pos = r.start;
+                start.vel = 0;
                 size.pos = r.size;
+                size.vel = 0;
             }
 
-            if (tooltip.classList.contains("is-visible")) {
+            if (tooltip?.classList.contains("is-visible")) {
                 showTooltip(lockedIndex);
             }
-        });
+        }
+
+        window.addEventListener("resize", resync);
+
+        if (isResponsive) {
+            mobileQuery.addEventListener("change", (e) => {
+                isVertical = baseVertical && !e.matches;
+                hideTooltip();
+                resync();
+            });
+        }
 
         measure();
         setLocked(lockedIndex, true);

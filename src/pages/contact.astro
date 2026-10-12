@@ -1,11 +1,246 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import '../styles/LiquidGlass.css';
+import EnvelopeIcon from '../icons/envelope.svg?raw';
+import GithubIcon from '../icons/github.svg?raw';
+import LinkedinIcon from '../icons/linkedin.svg?raw';
+
+// Rows without an `href` are left out.
+const contacts = [
+  {
+    label: "Email",
+    value: "23roberthoffman@gmail.com",
+    href: "mailto:23roberthoffman@gmail.com",
+    icon: EnvelopeIcon,
+  },
+  {
+    label: "GitHub",
+    value: "Robert-Hoffman04",
+    href: "https://github.com/Robert-Hoffman04",
+    icon: GithubIcon,
+  },
+  {
+    label: "LinkedIn",
+    value: "robert~hoffman",
+    href: "https://www.linkedin.com/in/robert~hoffman/",
+    icon: LinkedinIcon,
+  },
+].filter((contact) => contact.href);
 ---
 
 <Layout title="Contact | Robert Hoffman">
   <section class="contact page">
-    <div class="contact__hero">
-      <p class="text-white text-sm mb-2">Contact</p>
+    <div class="contact__content">
+      <div class="outer-glass contact__card">
+        <p class="contact__prompt">
+          <span class="contact__prompt-glyph">~/</span>contact
+        </p>
+
+        <h1 class="contact__title">Get in touch</h1>
+
+        <p class="contact__intro">
+          I'm looking to keep growing as an engineer on a team that builds
+          real things. If you have a role, a project, or just a question about
+          something I've made, I'd like to hear from you.
+        </p>
+
+        <ul class="contact__list">
+          {contacts.map((contact) => (
+            <li>
+              <a
+                class="contact__link"
+                href={contact.href}
+                target={contact.href.startsWith("mailto:") ? undefined : "_blank"}
+                rel={contact.href.startsWith("mailto:") ? undefined : "noopener noreferrer"}
+              >
+                <span class="contact__icon" set:html={contact.icon} />
+                <span class="contact__text">
+                  <span class="contact__label">{contact.label}</span>
+                  <span class="contact__value">{contact.value}</span>
+                </span>
+                <svg class="contact__arrow" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 17 17 7M9 7h8v8" />
+                </svg>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   </section>
 </Layout>
+
+<style>
+  /* The card is centred in the screen: no vertical padding, and the left
+     padding matches the room the page leaves for the nav on the right. */
+  .contact {
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: 140px;
+  }
+
+  .contact__content {
+    min-height: 100vh;
+    width: 44rem;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 0 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .contact__card {
+    opacity: 0;
+    transform: translateY(0.75rem);
+    animation: contact-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .contact__prompt {
+    margin: 0 0 1rem;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.875rem;
+    letter-spacing: 0.08em;
+    color: #9b98a8;
+  }
+
+  .contact__prompt-glyph {
+    color: #e8a33d;
+    margin-right: 0.35em;
+  }
+
+  .contact__title {
+    margin: 0;
+    font-size: clamp(2.5rem, 6vw, 4.25rem);
+    font-weight: 600;
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+    color: #f5f4f7;
+  }
+
+  .contact__intro {
+    margin: 1.5rem 0 0;
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    color: #9b98a8;
+  }
+
+  .contact__list {
+    margin: 2rem 0 0;
+    padding: 1rem 0 0;
+    border-top: 1px solid rgba(245, 244, 247, 0.1);
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .contact__link {
+    display: flex;
+    align-items: center;
+    gap: 1.125rem;
+    margin: 0 -0.875rem;
+    padding: 0.75rem 0.875rem;
+    border-radius: 999px;
+    color: #f5f4f7;
+    text-decoration: none;
+    transition: background-color 0.25s ease;
+  }
+
+  .contact__link:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .contact__link:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.6);
+    outline-offset: 2px;
+  }
+
+  /* Same glass as the bubble inside the nav. */
+  .contact__icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 999px;
+    background: linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.4),
+      rgba(255, 255, 255, 0.08)
+    );
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.6),
+      inset 0 -6px 10px rgba(255, 255, 255, 0.05),
+      0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  .contact__icon :global(svg) {
+    width: 24px;
+    height: 24px;
+    fill: currentColor;
+  }
+
+  .contact__text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .contact__label {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9b98a8;
+  }
+
+  .contact__value {
+    font-size: 1.125rem;
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+
+  .contact__arrow {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    margin-right: 0.5rem;
+    fill: none;
+    stroke: #9b98a8;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition:
+      stroke 0.25s ease,
+      transform 0.25s ease;
+  }
+
+  .contact__link:hover .contact__arrow {
+    stroke: #e8a33d;
+    transform: translate(2px, -2px);
+  }
+
+  @keyframes contact-rise {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .contact__card {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+
+    .contact__arrow {
+      transition: none;
+    }
+  }
+</style>

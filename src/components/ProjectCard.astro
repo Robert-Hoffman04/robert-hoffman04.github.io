@@ -1,0 +1,230 @@
+---
+import '../styles/LiquidGlass.css';
+import SceneImage from './SceneImage.astro';
+
+interface Props {
+  project: {
+    title: string;
+    description: string;
+    /** Image shown in the scene beside the card, pinned level with it. */
+    image?: string;
+    /** GitHub URL. Leave out for private projects and no button is shown. */
+    repo?: string;
+  };
+}
+
+const {
+    project
+} = Astro.props;
+
+const id = `project-${project.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+---
+
+<article class="project" id={id}>
+  <div class="outer-glass project__card">
+    <p class="project__index" aria-hidden="true"></p>
+    <div class="project__header">
+      <h3 class="project__title">{project.title}</h3>
+      {project.repo && (
+        <a
+          class="project__repo"
+          href={project.repo}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`${project.title} on GitHub`}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+          </svg>
+          <span>GitHub</span>
+        </a>
+      )}
+    </div>
+    <p class="project__description">{project.description}</p>
+  </div>
+  {project.image && <SceneImage src={project.image} height={60} anchor={`#${id}`} anchorFade />}
+</article>
+
+<style>
+  .project {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+
+  .project {
+    counter-increment: project;
+  }
+
+  .project__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+
+  /* Same glass as the bubble inside the nav, on its own. */
+  .project__repo {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    height: 48px;
+    padding: 0 1.25rem 0 0.875rem;
+    border-radius: 999px;
+    background: linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.4),
+      rgba(255, 255, 255, 0.08)
+    );
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.6),
+      inset 0 -6px 10px rgba(255, 255, 255, 0.05),
+      0 4px 16px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    font-size: 1rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.98);
+    text-decoration: none;
+    transition: filter 0.25s ease;
+  }
+
+  .project__repo:hover {
+    filter: brightness(1.25);
+  }
+
+  .project__repo:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.6);
+    outline-offset: 2px;
+  }
+
+  .project__repo svg {
+    width: 24px;
+    height: 24px;
+    fill: currentColor;
+  }
+
+  .project__index {
+    margin: 0 0 1rem;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.875rem;
+    letter-spacing: 0.08em;
+    color: #e8a33d;
+  }
+
+  .project__index::before {
+    content: counter(project, decimal-leading-zero);
+  }
+
+  .project__title {
+    margin: 0;
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 600;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: #f5f4f7;
+  }
+
+  .project__description {
+    margin: 1.25rem 0 0;
+    padding-top: 1.25rem;
+    border-top: 1px solid rgba(245, 244, 247, 0.1);
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    color: #9b98a8;
+  }
+
+  /* One project per screen: scrolling always settles on a single project. */
+  :global(html:has(.project)) {
+    scroll-snap-type: y mandatory;
+  }
+</style>
+
+<script>
+  import { sectionFocus } from "../lib/sectionFocus";
+
+  // Each card fades out as it leaves the centre of the screen and is gone
+  // before the next one starts to appear, so only one project shows at once.
+  const projects = [...document.querySelectorAll<HTMLElement>(".project")];
+
+  function update() {
+    for (const project of projects) {
+      const focus = sectionFocus(project);
+      project.style.opacity = String(focus);
+      project.style.visibility = focus > 0 ? "" : "hidden";
+    }
+  }
+
+  window.addEventListener("scroll", update, { passive: true });
+  window.addEventListener("resize", update);
+  update();
+
+  // Wheel travel (px) needed within one gesture to move to the next project.
+  // Raise it to make changing project take a more deliberate scroll.
+  const WHEEL_THRESHOLD = 0;
+  // A pause this long (ms) between wheel events starts a new gesture.
+  const GESTURE_GAP = 200;
+
+  const reduceMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  let travelled = 0;
+  let lastWheel = 0;
+  let moving = false;
+  // After a move, the rest of that gesture (e.g. trackpad inertia) is ignored.
+  let spent = false;
+
+  function currentIndex() {
+    let best = 0;
+    projects.forEach((project, index) => {
+      if (sectionFocus(project) > sectionFocus(projects[best])) best = index;
+    });
+    return best;
+  }
+
+  window.addEventListener(
+    "wheel",
+    (event) => {
+      if (event.ctrlKey || projects.length === 0) return;
+      event.preventDefault();
+
+      const now = performance.now();
+      if (now - lastWheel > GESTURE_GAP) {
+        travelled = 0;
+        spent = false;
+      }
+      lastWheel = now;
+      if (moving || spent) return;
+
+      // deltaMode 1 = lines, 2 = pages.
+      const unit =
+        event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
+      travelled += event.deltaY * unit;
+      if (Math.abs(travelled) < WHEEL_THRESHOLD) return;
+
+      const index = currentIndex();
+      const target = Math.min(
+        Math.max(index + Math.sign(travelled), 0),
+        projects.length - 1,
+      );
+      travelled = 0;
+      spent = true;
+      if (target === index) return;
+
+      moving = true;
+      const done = () => (moving = false);
+      window.addEventListener("scrollend", done, { once: true });
+      window.setTimeout(done, 1000);
+      projects[target].scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    },
+    { passive: false },
+  );
+</script>

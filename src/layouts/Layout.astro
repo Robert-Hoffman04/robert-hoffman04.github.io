@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import Backdrop from '../components/Backdrop.astro';
 import SiteNav from '../components/SiteNav.astro';
 
 interface Props {
@@ -23,6 +24,7 @@ const { title = "Robert Hoffman" } = Astro.props;
     <title>{title}</title>
   </head>
   <body>
+    <Backdrop />
     <slot />
     <SiteNav />
   </body>

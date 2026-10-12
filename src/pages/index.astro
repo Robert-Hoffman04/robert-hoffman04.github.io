@@ -4,7 +4,11 @@ import Rubik from '../components/Rubik.astro';
 ---
 
 <Layout title="Robert Hoffman">
-  <Rubik />
+  <Rubik
+    keyframes={[
+      { at: "35%", opacity: 1, y: 0, scale: 1, light: 1 },
+    ]}
+  />
   <section class="home page" id="home">
 
     <div class="home__content">

@@ -1,57 +1,19 @@
 ---
+import type { ItemKeyframe } from "../lib/scrollTimeline";
+
 interface Props {
-  class?: string;
+  /**
+   * Scroll keyframes for the cube: opacity, x/y offset (vw/vh), scale, and
+   * `light` for its face lights. The lights stay on when the cube fades
+   * unless `light` is keyframed too.
+   */
+  keyframes?: ItemKeyframe[];
 }
 
-const { class: className = "" } = Astro.props;
+const { keyframes = [] } = Astro.props;
 ---
 
-<div class:list={["rubik-stage", className]} id="rubik-stage">
-  <canvas id="rubik-canvas" aria-hidden="true"></canvas>
-</div>
-
-<style>
-  .rubik-stage {
-    position: sticky;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    margin-bottom: -100vh;
-    z-index: 0;
-    pointer-events: none;
-  }
-
-  .rubik-stage canvas {
-    position: absolute;
-    inset: 0;
-    display: block;
-    width: 100%;
-    height: 100%;
-    pointer-events: auto;
-    touch-action: none;
-    cursor: grab;
-    opacity: 0;
-    animation: rubik-fade 0.6s ease-out forwards;
-  }
-
-  .rubik-stage canvas:active {
-    cursor: grabbing;
-  }
-
-  @keyframes rubik-fade {
-    to {
-      opacity: 1;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .rubik-stage canvas {
-      animation: none;
-      opacity: 1;
-    }
-  }
-</style>
+<div id="rubik-stage" data-keyframes={JSON.stringify(keyframes)} hidden></div>
 
 <script>
   import * as THREE from "three";
@@ -59,7 +21,9 @@ const { class: className = "" } = Astro.props;
   import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
   import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
   import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-  import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+
+  import { getStage } from "../lib/sceneStage";
+  import type { ItemKeyframe } from "../lib/scrollTimeline";
 
   type Axis = "x" | "y" | "z";
 
@@ -68,11 +32,12 @@ const { class: className = "" } = Astro.props;
     gridPos: THREE.Vector3;
   }
 
-  const stage = document.getElementById("rubik-stage") as HTMLDivElement | null;
-  const canvas = document.getElementById(
-    "rubik-canvas",
-  ) as HTMLCanvasElement | null;
-  if (!stage || !canvas) throw new Error("rubik: required elements not found.");
+  // The cube is one item in the page's shared scene, so its lights hit the
+  // terrain and anything else on the stage.
+  const root = document.getElementById("rubik-stage");
+  const stage = getStage();
+  if (!root || !stage) throw new Error("rubik: required elements not found.");
+  const { canvas, renderer, scene, camera } = stage;
 
   const reduceMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)",
@@ -84,8 +49,7 @@ const { class: className = "" } = Astro.props;
   const DRAG_THRESHOLD = 5;
   const ANGLE_PER_PIXEL = Math.PI / 2 / 120;
   const TWIST_DURATION = 180;
-  const BASE_FOV = 38;
-  const REFERENCE_CANVAS_HEIGHT = 820;
+  const IDLE_RESUME_DELAY = 3000; // ms to wait after interaction before spinning again
 
   const FACE_COLORS: Record<string, number> = {
     px: 0xff3b30,
@@ -111,22 +75,9 @@ const { class: className = "" } = Astro.props;
     z: new THREE.Vector3(0, 0, 1),
   };
 
-  const renderer = new THREE.WebGLRenderer({
-    canvas,
-    antialias: true,
-    alpha: true,
-    powerPreference: "high-performance",
-  });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-  const scene = new THREE.Scene();
-
-  const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 100);
-  camera.position.set(0, 2.5, 10);
-  camera.lookAt(0, 0, 0);
+  // The face lights below take over lighting the terrain on this page.
+  stage.setDefaultLight(0);
+  canvas.classList.add("is-interactive");
 
   const cubeGroup = new THREE.Group();
   scene.add(cubeGroup);
@@ -139,52 +90,13 @@ const { class: className = "" } = Astro.props;
     { pos: new THREE.Vector3(0, 0, 2.3), color: purestHue(FACE_COLORS.pz) },
     { pos: new THREE.Vector3(0, 0, -2.3), color: purestHue(FACE_COLORS.nz) },
   ];
+  const FACE_LIGHT_INTENSITY = 2;
+  const faceLights: THREE.PointLight[] = [];
   for (const def of faceLightDefs) {
-    const light = new THREE.PointLight(def.color, 2, 30, 0);
+    const light = new THREE.PointLight(def.color, FACE_LIGHT_INTENSITY, 30, 0);
     light.position.copy(def.pos);
     cubeGroup.add(light);
-  }
-
-  const BACKDROP_DISTANCE = 20;
-  const backdropAnchor = new THREE.Group();
-  backdropAnchor.position.set(0, 0, -BACKDROP_DISTANCE);
-  scene.add(camera);
-  camera.add(backdropAnchor);
-
-  const terrainMaterial = new THREE.MeshStandardMaterial({
-    color: 0x474359,
-    roughness: 0.82,
-    metalness: 0,
-  });
-
-  let terrain: THREE.Object3D | null = null;
-  const TERRAIN_NATIVE_SIZE = 6;
-
-  new OBJLoader().load("/models/terrain.obj", (obj) => {
-    obj.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry.computeVertexNormals();
-        child.material = terrainMaterial;
-      }
-    });
-    obj.rotation.x = -Math.PI / 2;
-    terrain = obj;
-    backdropAnchor.add(obj);
-    fitBackdrop();
-  });
-
-  function fitBackdrop() {
-    if (!terrain) return;
-    const margin = 1.6;
-    const height =
-      2 *
-      Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) *
-      BACKDROP_DISTANCE *
-      margin;
-    const width = height * camera.aspect;
-    const extent = Math.max(width, height);
-    const scale = extent / TERRAIN_NATIVE_SIZE;
-    terrain.scale.set(scale, scale, scale);
+    faceLights.push(light);
   }
 
   const composer = new EffectComposer(renderer);
@@ -204,12 +116,13 @@ const { class: className = "" } = Astro.props;
     metalness: 0.15,
   });
 
+  const STICKER_EMISSIVE = 1.5;
   const stickerMaterials: Record<string, THREE.MeshStandardMaterial> = {};
   for (const [key, hex] of Object.entries(FACE_COLORS)) {
     stickerMaterials[key] = new THREE.MeshStandardMaterial({
       color: hex,
       emissive: hex,
-      emissiveIntensity: 1.5,
+      emissiveIntensity: STICKER_EMISSIVE,
       roughness: 0.3,
       metalness: 0,
     });
@@ -302,6 +215,23 @@ const { class: className = "" } = Astro.props;
   let isAnimating = false;
   let isUserAnimating = false;
   let idleSpin = !reduceMotion;
+  let idleResumeTimer: number | null = null;
+
+  function cancelIdleResume() {
+    if (idleResumeTimer !== null) {
+      window.clearTimeout(idleResumeTimer);
+      idleResumeTimer = null;
+    }
+  }
+
+  function scheduleIdleResume() {
+    cancelIdleResume();
+    if (reduceMotion) return;
+    idleResumeTimer = window.setTimeout(() => {
+      idleSpin = true;
+      idleResumeTimer = null;
+    }, IDLE_RESUME_DELAY);
+  }
 
   function setPointerNdc(clientX: number, clientY: number) {
     const rect = canvas!.getBoundingClientRect();
@@ -415,11 +345,13 @@ const { class: className = "" } = Astro.props;
       };
     }
     idleSpin = false;
+    cancelIdleResume();
     void rect;
   }
 
   function onPointerMove(event: PointerEvent) {
     if (!dragState) return;
+
     const dx = event.clientX - dragState.startX;
     const dy = event.clientY - dragState.startY;
 
@@ -437,41 +369,45 @@ const { class: className = "" } = Astro.props;
         dragState = null;
         return;
       }
+
       if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
 
       cubeGroup.updateMatrixWorld(true);
-      const cubeLocalNormal = dragState.localNormal
-        .clone()
-        .applyQuaternion(dragState.cubie.group.quaternion);
-
-      const ax = Math.abs(cubeLocalNormal.x);
-      const ay = Math.abs(cubeLocalNormal.y);
-      const az = Math.abs(cubeLocalNormal.z);
-      const normalAxis: Axis = ax > ay && ax > az ? "x" : ay > az ? "y" : "z";
-      const candidates: Axis[] = (["x", "y", "z"] as Axis[]).filter(
-        (a) => a !== normalAxis,
-      );
 
       const rect = canvas!.getBoundingClientRect();
-      const origin = dragState.cubie.group.getWorldPosition(
+      const cubieWorldPos = dragState.cubie.group.getWorldPosition(
         new THREE.Vector3(),
       );
-      const dragVec = new THREE.Vector2(dx, dy).normalize();
 
-      let bestAxis: Axis = candidates[0];
+      const dragVec = new THREE.Vector2(dx, dy).normalize();
+      const candidates: Axis[] = ["x", "y", "z"];
+
+      let bestAxis: Axis = "x";
       let bestTangent = new THREE.Vector2();
       let bestScore = -Infinity;
+
       for (const axis of candidates) {
         const axisWorldDir = AXIS_VEC[axis]
           .clone()
           .transformDirection(cubeGroup.matrixWorld);
-        const p1 = worldToScreen(origin, rect);
+
+        // Rotation moves the grabbed point perpendicular to the radius
+        // from the rotation axis, not parallel to the axis itself.
+        const radius = dragState.startPoint.clone().sub(cubeGroup.position);
+
+        const rotationTangent = new THREE.Vector3()
+          .crossVectors(axisWorldDir, radius)
+          .normalize();
+
+        const p1 = worldToScreen(dragState.startPoint, rect);
         const p2 = worldToScreen(
-          origin.clone().add(axisWorldDir.multiplyScalar(0.15)),
+          dragState.startPoint.clone().addScaledVector(rotationTangent, 0.15),
           rect,
         );
+
         const tangent = p2.sub(p1).normalize();
         const score = Math.abs(tangent.dot(dragVec));
+
         if (score > bestScore) {
           bestScore = score;
           bestAxis = axis;
@@ -480,12 +416,14 @@ const { class: className = "" } = Astro.props;
       }
 
       const layerCoord = Math.round((dragState.cubie.gridPos as any)[bestAxis]);
+
       const layer = cubies.filter(
         (c) => Math.round((c.gridPos as any)[bestAxis]) === layerCoord,
       );
 
       const pivot = new THREE.Group();
       cubeGroup.add(pivot);
+
       for (const c of layer) pivot.attach(c.group);
 
       dragState = {
@@ -498,6 +436,7 @@ const { class: className = "" } = Astro.props;
         layer,
         tangent: bestTangent,
       };
+
       return;
     }
 
@@ -520,7 +459,7 @@ const { class: className = "" } = Astro.props;
       );
     }
     dragState = null;
-    idleSpin = !reduceMotion;
+    scheduleIdleResume();
   }
 
   canvas.addEventListener("pointerdown", onPointerDown);
@@ -612,7 +551,8 @@ const { class: className = "" } = Astro.props;
 
   function playSolveQueue(index: number) {
     if (index >= solveMoves.length) {
-      idleSpin = !reduceMotion;
+      // Don't override the post-interaction delay if the user is mid-interaction
+      if (idleResumeTimer === null && !dragState) idleSpin = !reduceMotion;
       return;
     }
     twistLayer(solveMoves[index], SOLVE_MOVE_DURATION, () => {
@@ -623,70 +563,46 @@ const { class: className = "" } = Astro.props;
   idleSpin = true;
   window.setTimeout(() => playSolveQueue(0), reduceMotion ? 0 : 1000);
 
-  function updateViewCenter(
-    width: number,
-    height: number,
-    canvasRect: DOMRect,
-  ) {
-    const hero = document.querySelector<HTMLElement>(".home__hero");
-    const nav = document.getElementById("page-navigation");
-
-    let targetX = width / 2;
-    if (hero && nav) {
-      const heroRect = hero.getBoundingClientRect();
-      const navRect = nav.getBoundingClientRect();
-      const midpointX = (heroRect.right + navRect.left) / 2;
-      const candidateX = midpointX - canvasRect.left;
-      if (Number.isFinite(candidateX)) targetX = candidateX;
-    }
-
-    const targetY = window.innerHeight / 2;
-
-    const offsetX = width / 2 - targetX;
-    const offsetY = Number.isFinite(targetY) ? height / 2 - targetY : 0;
-    camera.setViewOffset(width, height, offsetX, offsetY, width, height);
-  }
-
-  function resize() {
-    const width = Math.max(1, window.innerWidth);
-    const height = Math.max(1, window.innerHeight);
-
-    camera.fov = THREE.MathUtils.clamp(
-      BASE_FOV * (height / REFERENCE_CANVAS_HEIGHT),
-      20,
-      75,
-    );
-
-    camera.aspect = width / height;
-
-    camera.clearViewOffset();
-    camera.updateProjectionMatrix();
-
-    fitBackdrop();
-    updateViewCenter(width, height, canvas!.getBoundingClientRect());
-
-    renderer.setSize(width, height, false);
+  function resize(width: number, height: number) {
     composer.setSize(width, height);
     bloomPass.setSize(width, height);
   }
-  const resizeObserver = new ResizeObserver(resize);
-  resizeObserver.observe(canvas);
-  window.addEventListener("resize", resize);
-  resize();
+  stage.onResize(resize);
 
-  let running = true;
-  document.addEventListener("visibilitychange", () => {
-    running = document.visibilityState === "visible";
-    if (running) requestAnimationFrame(tick);
+  const keyframes: ItemKeyframe[] = JSON.parse(root.dataset.keyframes ?? "[]");
+  const fadeMaterials = [bodyMaterial, ...Object.values(stickerMaterials)];
+
+  stage.addItem({
+    object: cubeGroup,
+    keyframes,
+    setOpacity(opacity) {
+      const fading = opacity < 1;
+      for (const material of fadeMaterials) {
+        if (material.transparent !== fading) {
+          material.transparent = fading;
+          material.needsUpdate = true;
+        }
+        material.opacity = opacity;
+      }
+      for (const material of Object.values(stickerMaterials)) {
+        material.emissiveIntensity = STICKER_EMISSIVE * opacity;
+      }
+
+      // Hide the cubies, not cubeGroup, so the face lights keep shining.
+      const shown = opacity > 0.001;
+      for (const cubie of cubies) cubie.group.visible = shown;
+      canvas.classList.toggle("is-interactive", shown);
+    },
+    setLight(light) {
+      for (const faceLight of faceLights) {
+        faceLight.intensity = FACE_LIGHT_INTENSITY * light;
+      }
+    },
   });
 
-  function tick() {
-    if (!running) return;
-    if (idleSpin && !isUserAnimating) {
-      cubeGroup.rotation.y += 0.0018;
-    }
-    composer.render();
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
+  stage.setRender(() => composer.render());
+  stage.onFrame(() => {
+    if (idleSpin && !isUserAnimating) cubeGroup.rotation.y += 0.0018;
+    stage.invalidate();
+  });
 </script>
