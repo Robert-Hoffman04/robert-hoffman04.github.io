@@ -10,9 +10,12 @@ const items = [
     { label: "Contact", href: "/contact", icon: AtIcon },
 ];
 
+// Built pages are served as "/projects/", the dev server as "/projects".
+const currentPath = Astro.url.pathname.replace(/\/+$/, "") || "/";
+
 const activeIndex = Math.max(
     0,
-    items.findIndex((item) => item.href === Astro.url.pathname),
+    items.findIndex((item) => item.href === currentPath),
 );
 ---
 
